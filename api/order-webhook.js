@@ -6,7 +6,7 @@ function verifyShopifyWebhook(rawBody, hmacHeader) {
   return true;
 }
 async function createDropiOrder(payload) {
-  const res = await fetch(`${DROPI_BASE_URL}/integrations/orders/`, {
+  const res = await fetch(`${DROPI_BASE_URL}/integrations/orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'dropi-integration-key': DROPI_TOKEN },
     body: JSON.stringify(payload),
