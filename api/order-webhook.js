@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 const DROPI_TOKEN    = process.env.DROPI_TOKEN;
-const DROPI_BASE_URL = 'http://app.dropi.co:80';
+const DROPI_BASE_URL = 'https://api.dropi.co';
 const SHOPIFY_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
 function verifyShopifyWebhook(rawBody, hmacHeader) {
   return true;
@@ -15,16 +15,6 @@ async function createDropiOrder(payload) {
   let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
   return { status: res.status, ok: res.ok, body: json };
 }
-const CIUDAD_MAP = {
-  'bogota':11,'bogotá':11,'medellin':80,'medellín':80,'cali':170,
-  'barranquilla':8,'cartagena':45,'bucaramanga':76,'cucuta':54,'cúcuta':54,
-  'pereira':66,'manizales':17,'ibague':73,'ibagué':73,
-  'santa marta':47,'villavicencio':50,
-};
-function getCityId(city) {
-  if (!city) return 11;
-  return CIUDAD_MAP[city.toLowerCase().trim()] ?? 11;
-}
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -36,8 +26,7 @@ async function getRawBody(req) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const rawBody = await getRawBody(req);
-  const hmac    = req.headers['x-shopify-hmac-sha256'];
-  if (!verifyShopifyWebhook(rawBody, hmac)) return res.status(401).json({ error: 'Unauthorized' });
+  if (!verifyShopifyWebhook(rawBody, req.headers['x-shopify-hmac-sha256'])) return res.status(401).json({ error: 'Unauthorized' });
   let order;
   try { order = JSON.parse(rawBody); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
   const shipping  = order.shipping_address || order.billing_address || {};
@@ -57,18 +46,26 @@ export default async function handler(req, res) {
   for (let i = 0; i < proveedores.length; i++) {
     const vendor  = proveedores[i];
     const items   = grupos[vendor];
-    const products = {};
-    items.forEach((item, idx) => {
-      products[String(idx)] = { id: item.dropi_id, price: item.price, quantity: item.quantity, ...(item.variation_id ? { variation_id: item.variation_id } : {}) };
-    });
+    const products = items.map(item => ({
+      id:           item.dropi_id,
+      price:        item.price,
+      quantity:     item.quantity,
+      variation_id: item.variation_id || null,
+    }));
     const payload = {
-      external_id:    `${shopifyId}-${i + 1}`,
-      client_name:    shipping.first_name || customer.first_name || 'Cliente',
-      client_surname: shipping.last_name  || customer.last_name  || '',
-      client_phone:   shipping.phone      || customer.phone      || order.phone || '',
-      client_address: shipping.address1   || '',
-      client_city:    getCityId(shipping.city),
-      total:          Number(order.total_price || 0),
+      calculate_costs_and_shiping: true,
+      state:             shipping.province || 'CUNDINAMARCA',
+      city:              shipping.city     || 'BOGOTA',
+      name:              shipping.first_name || customer.first_name || 'Cliente',
+      surname:           shipping.last_name  || customer.last_name  || '',
+      phone:             (shipping.phone || customer.phone || order.phone || '').replace(/\D/g,''),
+      dir:               shipping.address1 || '',
+      notes:             `Pedido Shopify #${shopifyId}`,
+      payment_method_id: 1,
+      rate_type:         'CON RECAUDO',
+      type:              'FINAL_ORDER',
+      total_order:       Number(order.total_price || 0),
+      external_id:       `${shopifyId}-${i + 1}`,
       products,
     };
     console.log('PAYLOAD A DROPI:', JSON.stringify(payload));
