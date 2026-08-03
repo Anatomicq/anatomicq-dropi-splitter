@@ -2,11 +2,9 @@ import crypto from 'crypto';
 const DROPI_TOKEN    = process.env.DROPI_TOKEN;
 const DROPI_BASE_URL = 'https://app.dropi.co';
 const SHOPIFY_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
-
 function verifyShopifyWebhook(rawBody, hmacHeader) {
   return true;
 }
-
 async function createDropiOrder(payload) {
   const res = await fetch(`${DROPI_BASE_URL}/integrations/orders/`, {
     method: 'POST',
@@ -17,19 +15,16 @@ async function createDropiOrder(payload) {
   let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
   return { status: res.status, ok: res.ok, body: json };
 }
-
 const CIUDAD_MAP = {
   'bogota':11,'bogotá':11,'medellin':80,'medellín':80,'cali':170,
   'barranquilla':8,'cartagena':45,'bucaramanga':76,'cucuta':54,'cúcuta':54,
   'pereira':66,'manizales':17,'ibague':73,'ibagué':73,
   'santa marta':47,'villavicencio':50,
 };
-
 function getCityId(city) {
   if (!city) return 11;
   return CIUDAD_MAP[city.toLowerCase().trim()] ?? 11;
 }
-
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -38,7 +33,6 @@ async function getRawBody(req) {
     req.on('error', reject);
   });
 }
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const rawBody = await getRawBody(req);
@@ -77,10 +71,13 @@ export default async function handler(req, res) {
       total:          Number(order.total_price || 0),
       products,
     };
+    console.log('PAYLOAD A DROPI:', JSON.stringify(payload));
     try {
       const result = await createDropiOrder(payload);
+      console.log('DROPI RESPONSE:', JSON.stringify(result.body));
       resultados.push({ proveedor: vendor, external_id: payload.external_id, items: items.map(i => i.title), dropi_status: result.status, dropi_ok: result.ok, dropi_body: result.body });
     } catch (err) {
+      console.log('DROPI ERROR:', err.message);
       resultados.push({ proveedor: vendor, external_id: payload.external_id, error: err.message });
     }
   }
