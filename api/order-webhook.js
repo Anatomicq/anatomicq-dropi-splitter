@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 const DROPI_TOKEN    = process.env.DROPI_TOKEN;
-const DROPI_BASE_URL = 'http://app.dropi.co:80';
+const DROPI_BASE_URL = 'https://dropify.dropi.co';
 const SHOPIFY_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
 function verifyShopifyWebhook(rawBody, hmacHeader) {
   if (!SHOPIFY_SECRET) return true;
