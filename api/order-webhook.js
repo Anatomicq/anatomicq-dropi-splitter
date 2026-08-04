@@ -23,7 +23,7 @@ async function getRawBody(req) {
 }
 
 async function requestFulfillment(orderId, fulfillmentOrderId) {
-  const url = `https://${SHOPIFY_STORE}/admin/api/2024-01/fulfillment_orders/${fulfillmentOrderId}/fulfillment_request.json`;
+  const url = `https://${SHOPIFY_STORE}/admin/api/2026-07/fulfillment_orders/${fulfillmentOrderId}/fulfillment_request.json`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -42,7 +42,7 @@ async function requestFulfillment(orderId, fulfillmentOrderId) {
 }
 
 async function getFulfillmentOrders(orderId) {
-  const url = `https://${SHOPIFY_STORE}/admin/api/2024-01/orders/${orderId}/fulfillment_orders.json`;
+  const url = `https://${SHOPIFY_STORE}/admin/api/2026-07/orders/${orderId}/fulfillment_orders.json`;
   const res = await fetch(url, {
     headers: {
       'X-Shopify-Access-Token': SHOPIFY_TOKEN,
