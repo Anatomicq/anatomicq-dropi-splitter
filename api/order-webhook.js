@@ -3,7 +3,12 @@ const DROPI_TOKEN    = process.env.DROPI_TOKEN;
 const DROPI_BASE_URL = 'https://api.dropi.co';
 const SHOPIFY_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
 function verifyShopifyWebhook(rawBody, hmacHeader) {
-  return true;
+  if (!SHOPIFY_SECRET) return true;
+  const digest = crypto
+    .createHmac('sha256', SHOPIFY_SECRET)
+    .update(rawBody, 'utf8')
+    .digest('base64');
+  return digest === hmacHeader;
 }
 async function createDropiOrder(payload) {
   const res = await fetch(`${DROPI_BASE_URL}/integrations/order/`, {
