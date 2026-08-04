@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 const DROPI_TOKEN    = process.env.DROPI_TOKEN;
-const DROPI_BASE_URL = 'https://dropify.dropi.co';
+const DROPI_BASE_URL = 'https://api.dropi.co';
 const SHOPIFY_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
 function verifyShopifyWebhook(rawBody, hmacHeader) {
   if (!SHOPIFY_SECRET) return true;
@@ -11,7 +11,7 @@ function verifyShopifyWebhook(rawBody, hmacHeader) {
   return digest === hmacHeader;
 }
 async function createDropiOrder(payload) {
-  const res = await fetch(`${DROPI_BASE_URL}/api/orders`, {
+  const res = await fetch(`${DROPI_BASE_URL}/integrations/orders/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'dropi-integration-key': DROPI_TOKEN },
     body: JSON.stringify(payload),
