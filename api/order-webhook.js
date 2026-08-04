@@ -49,7 +49,8 @@ async function getFulfillmentOrders(orderId) {
     },
   });
   const json = await res.json();
-  return json.fulfillment_orders || [];
+console.log('SHOPIFY FULFILLMENT ORDERS RAW:', JSON.stringify(json));
+return json.fulfillment_orders || [];
 }
 
 export default async function handler(req, res) {
