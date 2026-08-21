@@ -70,14 +70,6 @@ export default async function handler(req, res) {
     const fulfillmentOrders = await getFulfillmentOrders(orderId);
     console.log(`Fulfillment orders encontradas: ${fulfillmentOrders.length}`);
 
-    // Un solo proveedor (una sola orden de cumplimiento): no se interviene y el
-    // pedido sigue el flujo normal de la tienda/Dropi. Este webhook solo actua
-    // cuando Shopify dividio el pedido entre varios proveedores.
-    if (fulfillmentOrders.length <= 1) {
-      console.log(`Pedido #${order.order_number}: un solo proveedor, se deja al flujo normal.`);
-      return res.status(200).json({ order: order.order_number, skip: 'proveedor-unico' });
-    }
-
     const resultados = [];
     for (const fo of fulfillmentOrders) {
       console.log(`Procesando fulfillment order ${fo.id} - status: ${fo.status}`);
