@@ -5,12 +5,17 @@ const SHOPIFY_TOKEN  = process.env.SHOPIFY_ACCESS_TOKEN;
 const SHOPIFY_STORE  = 'xx0kf5-dk.myshopify.com';
 
 function verifyShopifyWebhook(rawBody, hmacHeader) {
-  if (!SHOPIFY_SECRET) return true;
+  // Fallar CERRADO: sin secreto configurado, se rechaza todo (antes devolvía
+  // true y dejaba pasar cualquier pedido falso).
+  if (!SHOPIFY_SECRET || !hmacHeader) return false;
   const digest = crypto
     .createHmac('sha256', SHOPIFY_SECRET)
     .update(rawBody, 'utf8')
     .digest('base64');
-  return digest === hmacHeader;
+  // Comparación en tiempo constante (evita ataques de timing sobre la firma).
+  const a = Buffer.from(digest, 'utf8');
+  const b = Buffer.from(String(hmacHeader), 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 async function getRawBody(req) {
