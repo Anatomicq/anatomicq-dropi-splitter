@@ -11,9 +11,21 @@
 import crypto from 'crypto';
 
 const STORE = 'xx0kf5-dk.myshopify.com';
-const TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
+const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
+const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
 const API = '2025-01';
+let TOKEN = null;
+async function getToken() {
+  if (TOKEN) return TOKEN;
+  const r = await fetch(`https://${STORE}/admin/oauth/access_token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: 'client_credentials' }),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error('No token: ' + JSON.stringify(j).slice(0, 200));
+  TOKEN = j.access_token; return TOKEN;
+}
 
 function verifyShopifyWebhook(rawBody, hmacHeader) {
   if (!SECRET || !hmacHeader) return false;
@@ -173,6 +185,7 @@ export default async function handler(req, res) {
 
   // Responder 200 rapido; procesar igual (Vercel espera a que termine el handler).
   try {
+    await getToken();
     const d = await gql(Q_ORDER, { id: gid });
     if (!d.order) { console.log(`Pedido ${gid} no encontrado`); return res.status(200).json({ ok: true, skip: 'no encontrado' }); }
     await dividirPedido(d.order);
