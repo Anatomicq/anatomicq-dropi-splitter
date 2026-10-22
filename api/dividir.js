@@ -80,6 +80,7 @@ const GATEWAY_COD = 'Cash on Delivery (COD)';
 const Q_FO = `query($id:ID!){ order(id:$id){ fulfillmentOrders(first:10){ edges{ node{ id status requestStatus } } } } }`;
 const M_FO_REQUEST = `mutation($id:ID!){ fulfillmentOrderSubmitFulfillmentRequest(id:$id){ submittedFulfillmentOrder{ id requestStatus } userErrors{ field message } } }`;
 const M_ORDER_TAG = `mutation($id:ID!,$tags:[String!]!){ tagsAdd(id:$id, tags:$tags){ userErrors{ field message } } }`;
+const M_ORDER_UNTAG = `mutation($id:ID!,$tags:[String!]!){ tagsRemove(id:$id, tags:$tags){ userErrors{ field message } } }`;
 const M_ORDER_CANCEL = `mutation($id:ID!){ orderCancel(orderId:$id, reason:OTHER, refund:false, restock:false, notifyCustomer:false){ userErrors{ field message } } }`;
 
 async function pedirPreparacion(orderId) {
@@ -113,6 +114,11 @@ async function dividirPedido(o) {
   if (provs.length < 2 && !esCOD && !hayPack) { console.log(`${o.name}: un solo proveedor (tarjeta) sin pack, se omite.`); return; }
   if (productos.some(it => !it.variant || !it.variant.id)) { console.log(`${o.name}: productos sin variante (borrados) - se omite.`); return; }
 
+  // CANDADO: marcar "dividido" ANTES de crear hijos. Si Shopify reintenta el
+  // webhook (respuesta lenta) o llega otro evento del mismo pedido, la segunda
+  // ejecucion ve el tag y se omite. Antes el tag se ponia al final -> duplicados.
+  await gql(M_ORDER_TAG, { id: o.id, tags: ['dividido'] });
+
   const costoExtras = extras.reduce((s, it) => s + parseFloat(it.originalUnitPriceSet.shopMoney.amount) * it.quantity, 0);
   const costoEnvio = parseFloat(o.shippingLine?.originalPriceSet?.shopMoney?.amount || 0);
   const contraentregaExistente = extras.filter(it => /contra\s?entrega/i.test(it.title || '')).reduce((s, it) => s + parseFloat(it.originalUnitPriceSet.shopMoney.amount) * it.quantity, 0);
@@ -135,7 +141,7 @@ async function dividirPedido(o) {
   };
 
   console.log(`${o.name} -> dividir en ${provs.length} | envio total ${money(costoEnvioTotal)} PROPORCIONAL`);
-  let i = 0;
+  let i = 0, creados = 0;
   for (const v of provs) {
     i++;
     const itemsProv = porProv[v];
@@ -162,15 +168,25 @@ async function dividirPedido(o) {
     const c = await gql(M_ORDER_CREATE, { order, options });
     if (c.orderCreate.userErrors.length) { console.log('      ERROR crear pedido: ' + JSON.stringify(c.orderCreate.userErrors)); continue; }
     const nuevo = c.orderCreate.order;
+    creados++;
     console.log(`      creado ${nuevo.name} (pago: ${nuevo.displayFinancialStatus})`);
     await pedirPreparacion(nuevo.id);
   }
 
-  // Marcar y cancelar el original (sin reembolso).
-  await gql(M_ORDER_TAG, { id: o.id, tags: ['dividido'] });
+  // Si no se creo ningun hijo, quitar el candado para poder reintentar.
+  if (!creados) {
+    await gql(M_ORDER_UNTAG, { id: o.id, tags: ['dividido'] });
+    console.log(`   ${o.name}: no se creo ningun pedido, se quita tag "dividido".`);
+    return;
+  }
+
+  // Cancelar el original (sin reembolso).
   const r = await gql(M_ORDER_CANCEL, { id: o.id });
   console.log(`   original ${o.name} ${r.orderCancel.userErrors.length ? 'error cancelar: ' + JSON.stringify(r.orderCancel.userErrors) : 'CANCELADO (sin reembolso)'}`);
 }
+
+const VISTOS = new Set();      // X-Shopify-Event-Id ya recibidos (por instancia)
+const EN_PROCESO = new Set();  // pedidos dividiendose ahora mismo (por instancia)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -183,6 +199,13 @@ export default async function handler(req, res) {
   const gid = payload.admin_graphql_api_id || (payload.id ? `gid://shopify/Order/${payload.id}` : null);
   if (!gid) return res.status(400).json({ error: 'Sin ID de pedido' });
 
+  // Anti-duplicado en memoria: mismo evento o mismo pedido ya en proceso en esta instancia.
+  const eventId = req.headers['x-shopify-event-id'] || req.headers['x-shopify-webhook-id'];
+  if (eventId && VISTOS.has(eventId)) return res.status(200).json({ ok: true, skip: 'evento repetido' });
+  if (EN_PROCESO.has(gid)) return res.status(200).json({ ok: true, skip: 'pedido en proceso' });
+  if (eventId) VISTOS.add(eventId);
+  EN_PROCESO.add(gid);
+
   // Responder 200 rapido; procesar igual (Vercel espera a que termine el handler).
   try {
     await getToken();
@@ -193,5 +216,7 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Error divisor:', err.message);
     return res.status(200).json({ ok: false, error: err.message }); // 200 para que Shopify no reintente en loop
+  } finally {
+    EN_PROCESO.delete(gid);
   }
 }
